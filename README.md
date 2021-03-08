@@ -1,2 +1,2 @@
 # About
-A Discord bot to parse matches from [spire.gg](https://spire.gg) tournaments.
+A Discord bot to scrape Beserker Team League matches from spire.gg
