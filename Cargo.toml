@@ -1,5 +1,5 @@
 [package]
-name = "Beserker-Bot"
+name = "beserker-bot"
 version = "0.1.0"
 authors = ["satanja <s.a.tanja@student.tue.nl>"]
 edition = "2018"
@@ -7,3 +7,16 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+structopt = "0.3.21"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+reqwest = "0.11.1"
+# TODO: might need to update the features
+serenity = { version = "0.10.4", default-features = false, features = [
+    "client",
+    "gateway",
+    "rustls_backend",
+    "model",
+] }
+chrono = "0.4.19"
