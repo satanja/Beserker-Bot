@@ -45,7 +45,7 @@ impl EventHandler for Handler {
 #[tokio::main]
 async fn main() {
     // Configure the client with your Discord bot token in the environment.
-    match api::get_bout(2156, None).await {
+    match api::get_bout(2156).await {
         Ok(_) => println!("ok!"),
         Err(why) => println!("{}", why),
     }

@@ -47,11 +47,9 @@ async fn make_request<T: IntoUrl>(request: T) -> Result<String, reqwest::Error> 
     Ok(result)
 }
 
-/// Gets the latest match (referred to as Bout to avoid overlap with the Rust keyword `match`) 
-/// given a `bout_id` from the spire.gg API.
-pub async fn get_bout(bout_id: usize, old_bout: Option<Bout>) -> Result<Bout, String> {
-    // TODO: use actual old_bout
-
+/// Gets the match (referred to as Bout to avoid overlap with the Rust keyword `match`) 
+/// with `bout_id` from the spire.gg API.
+pub async fn get_bout(bout_id: usize) -> Result<Bout, String> {
     let address = format!("https://api.spire.gg/matches/{}", bout_id);
 
     match make_request(&address).await {
@@ -60,11 +58,7 @@ pub async fn get_bout(bout_id: usize, old_bout: Option<Bout>) -> Result<Bout, St
                 Ok(parsed) => {
                     println!("{:?}", parsed);
 
-                    // TODO:
-                    // verify whether the parsed bout is new
-                    // if not return the old bout,
-                    // if the parsed bout is new, construct a new Bout
-                    unimplemented!("implement get_bout logic");
+                    unimplemented!("construct Bout from `parsed`");
                 }
                 Err(why) => Err(format!(
                     "Error parsing resposne of \"{}\"!\n\t{}",
