@@ -180,6 +180,11 @@ impl EventHandler for Handler {
         let command = words[0];
 
         // TODO:
+        // 9-3-2021 12:48 CET:
+        // I found the fix: commands are grouped in structs, simply add Rc 
+        // references to all structs that need ownership of that data. Will 
+        // implement later.
+        //
         // Would probably be better to extract into separate methods, however,
         // we need references to `discord_commands` and `state`, and I'm not
         // seeing how we should do that. So `match` FTW at the moment...
