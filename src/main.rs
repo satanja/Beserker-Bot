@@ -11,12 +11,15 @@ use serenity::{
     prelude::*,
 };
 
+use serenity::client::{Client, Context, EventHandler};
+use serenity::framework::standard::{
+    macros::{command, group},
+    CommandResult, StandardFramework,
+};
+
 /// The message handler. Contains the list of Discord commands and the internal
 /// state of all the bouts.
-struct Handler {
-    discord_commands: DiscordCommands,
-    state: State,
-}
+struct Handler;
 
 /// Actions the bot can perform.
 enum InternalCommand {
@@ -153,15 +156,14 @@ impl State {
     }
 }
 
-impl Handler {
-    pub fn new() -> Handler {
-        let discord_commands = DiscordCommands::new();
-        let state = State::new();
-        Handler {
-            discord_commands,
-            state,
-        }
-    }
+struct DiscordCommandsData;
+impl TypeMapKey for DiscordCommandsData {
+    type Value = DiscordCommands;
+}
+
+struct StateData;
+impl TypeMapKey for StateData {
+    type Value = State;
 }
 
 #[async_trait]
@@ -172,35 +174,22 @@ impl EventHandler for Handler {
     // Event handlers are dispatched through a threadpool, and so multiple
     // events can be dispatched simultaneously.
     async fn message(&self, ctx: Context, msg: Message) {
-        if !msg.content.starts_with("!") {
-            return;
-        }
+        // if !msg.content.starts_with("!") {
+        //     return;
+        // }
 
-        let words: Vec<_> = msg.content.split(" ").collect();
-        let command = words[0];
+        // let words: Vec<_> = msg.content.split(" ").collect();
+        // let command = words[0];
 
-        // TODO:
-        // 9-3-2021 12:48 CET:
-        // I found the fix: commands are grouped in structs, simply add Rc 
-        // references to all structs that need ownership of that data. Will 
-        // implement later.
-        //
-        // Would probably be better to extract into separate methods, however,
-        // we need references to `discord_commands` and `state`, and I'm not
-        // seeing how we should do that. So `match` FTW at the moment...
-        //
-        // Anyone can currently add or remove commands, which is a little
-        // dangerous...
-        match command{
-            "!add_command" => {
-                println!("adding a new command!");
-            },
-            "!remove_command" => {
-                println!("removing a command!");
-                
-            },
-            x => println!("some other command {}", x),
-        }
+        // match command {
+        //     "!add_command" => {
+        //         println!("adding a new command!");
+        //     }
+        //     "!remove_command" => {
+        //         println!("removing a command!");
+        //     }
+        //     x => println!("some other command {}", x),
+        // }
     }
 
     // Set a handler to be called on the `ready` event. This is called when a
@@ -214,29 +203,104 @@ impl EventHandler for Handler {
     }
 }
 
+#[group]
+#[commands(add_command, remove_command)]
+struct Admin;
+
 #[tokio::main]
 async fn main() {
-    // Configure the client with your Discord bot token in the environment.
+    let framework = StandardFramework::new()
+        .configure(|c| c.prefix("!")) // set the bot's prefix to "!"
+        .group(&ADMIN_GROUP);
 
+    // Login with a bot token from the environment
     let token = env::var("BOT_TOKEN").expect("Expected a token in the environment");
-
-    // Create a new instance of the Client, logging in as a bot. This will
-    // automatically prepend your bot token with "Bot ", which is a requirement
-    // by Discord for bot users.
-
-    let handler = Handler::new();
-
     let mut client = Client::builder(&token)
-        .event_handler(handler)
+        .event_handler(Handler)
+        .framework(framework)
         .await
         .expect("Err creating client");
 
-    // Finally, start a single shard, and start listening to events.
-    //
-    // Shards will automatically attempt to reconnect, and will perform
-    // exponential backoff until it reconnects.
+    // add context data structures
+    let state = State::new();
+    let commands = DiscordCommands::new();
+    let mut data = client.data.write().await;
+    data.insert::<StateData>(state);
+    data.insert::<DiscordCommandsData>(commands);
+    drop(data);
 
+    // start listening for events by starting a single shard
     if let Err(why) = client.start().await {
-        println!("Client error: {:?}", why);
+        println!("An error occurred while running the client: {:?}", why);
     }
+}
+
+#[command]
+// Syntax: !add_command <new_command> <action> [args]
+async fn add_command(ctx: &Context, msg: &Message) -> CommandResult {
+    let mut data = ctx.data.write().await;
+    let commands = data.get_mut::<DiscordCommandsData>().unwrap();
+
+    let words: Vec<_> = msg.content.split(" ").collect();
+
+    if words.len() < 3 {
+        // TODO: return appropriate error
+        return Ok(());
+    }
+
+    let new_command = format!("!{}", words[1]);
+    let action = words[2];
+
+    match action.to_lowercase().as_ref() {
+        "insert" => {
+            // !add_command <new_command> <action> <team_id> <tournament_id>
+            if words.len() < 5 {
+                // TODO: return appropriate error
+                return Ok(());
+            }
+
+            let team_id: usize;
+            match words[3].parse::<usize>() {
+                Ok(num) => team_id = num,
+                Err(why) => return Ok(()),
+            }
+
+            let tournament_id: usize;
+            match words[4].parse::<usize>() {
+                Ok(num) => tournament_id = num,
+                Err(why) => return Ok(()),
+            }
+
+            commands.add_command(new_command, InternalCommand::Insert(tournament_id, team_id));
+        }
+
+        _ => {
+            msg.reply(
+                ctx,
+                "Invalid action, please use one of `insert`, `remove`, or `poll`.".to_string(),
+            )
+            .await?;
+            return Ok(());
+        }
+    }
+
+    // println!("{:?}", words);
+    msg.reply(ctx, format!("Sucessfully added command `!{}`.", words[1]))
+        .await?;
+
+    Ok(())
+}
+
+#[command]
+// Syntax: !remove_command <command>
+async fn remove_command(ctx: &Context, msg: &Message) -> CommandResult {
+    let mut data = ctx.data.read().await;
+    let commands = data.get::<DiscordCommandsData>().unwrap();
+
+    let words: Vec<_> = msg.content.split(" ").collect();
+    println!("{:?}", words);
+
+    msg.reply(ctx, format!("Sucessfully removed command `!{}`.", words[1]))
+        .await?;
+    Ok(())
 }
