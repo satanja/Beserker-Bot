@@ -4,7 +4,7 @@ pub type MapName = String;
 #[derive(Debug)]
 pub struct Bout {
     tournament: String,
-    date: usize,
+    datetime: String,
     maps: Vec<(MapName, Option<Player>)>,
 }
 
@@ -12,15 +12,15 @@ impl Eq for Bout {}
 
 impl PartialEq for Bout {
     fn eq(&self, other: &Self) -> bool {
-        self.date == other.date        
+        self.datetime == other.datetime        
     }
 }
 
 impl Bout {
 
-    pub fn new(tournament: String, date: usize, maps: Vec<String>) -> Bout {
+    pub fn new(tournament: String, datetime: String, maps: Vec<String>) -> Bout {
         let maps = maps.into_iter().map(|map| (map, None)).collect();
-        Bout { tournament, date, maps }
+        Bout { tournament, datetime, maps }
     }
 
     pub fn set_player(&mut self, index: usize, player: String) {
@@ -35,8 +35,8 @@ impl Bout {
         &self.tournament
     }
 
-    pub fn get_date(&self) -> &usize {
-        &self.date
+    pub fn get_date(&self) -> &str {
+        &self.datetime
     }
 
     pub fn get_maps(&self) -> &Vec<(MapName, Option<Player>)> {
