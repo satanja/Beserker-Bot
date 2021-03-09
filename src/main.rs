@@ -104,8 +104,8 @@ impl State {
         }
     }
 
-    /// Removes a player from a bout, identified by `tournament_id` and 
-    /// `team_id`, at a specified index. Requires `args` to be 
+    /// Removes a player from a bout, identified by `tournament_id` and
+    /// `team_id`, at a specified index. Requires `args` to be
     /// `Some(Arguments::Remove(index))`. In case `args` is incorrect, return
     /// an appropriate error.
     fn remove(
@@ -121,8 +121,8 @@ impl State {
         }
     }
 
-    /// Inserts a player into a bout, identified by `tournament_id` and 
-    /// `team_id`, at a specified index. Requires `args` to be 
+    /// Inserts a player into a bout, identified by `tournament_id` and
+    /// `team_id`, at a specified index. Requires `args` to be
     /// `Some(Arguments::Remove(player, index))`. In case `args` is incorrect, return
     /// an appropriate error.
     fn insert(
@@ -141,7 +141,7 @@ impl State {
         }
     }
 
-    /// Polls the API for the next bout identified by `tournament_id` and 
+    /// Polls the API for the next bout identified by `tournament_id` and
     /// `team_id`. Forwards any error of the API.
     fn poll(
         &mut self,
@@ -172,14 +172,29 @@ impl EventHandler for Handler {
     // Event handlers are dispatched through a threadpool, and so multiple
     // events can be dispatched simultaneously.
     async fn message(&self, ctx: Context, msg: Message) {
-        if msg.content == "!ping" {
-            // Sending a message can fail, due to a network error, an
-            // authentication error, or lack of permissions to post in the
-            // channel, so log to stdout when some error happens, with a
-            // description of it.
-            if let Err(why) = msg.channel_id.say(&ctx.http, "Pong!").await {
-                println!("Error sending message: {:?}", why);
-            }
+        if !msg.content.starts_with("!") {
+            return;
+        }
+
+        let words: Vec<_> = msg.content.split(" ").collect();
+        let command = words[0];
+
+        // TODO:
+        // Would probably be better to extract into separate methods, however,
+        // we need references to `discord_commands` and `state`, and I'm not
+        // seeing how we should do that. So `match` FTW at the moment...
+        //
+        // Anyone can currently add or remove commands, which is a little
+        // dangerous...
+        match command{
+            "!add_command" => {
+                println!("adding a new command!");
+            },
+            "!remove_command" => {
+                println!("removing a command!");
+                
+            },
+            x => println!("some other command {}", x),
         }
     }
 
@@ -196,27 +211,27 @@ impl EventHandler for Handler {
 
 #[tokio::main]
 async fn main() {
-    // // Configure the client with your Discord bot token in the environment.
+    // Configure the client with your Discord bot token in the environment.
 
-    // let token = env::var("BOT_TOKEN").expect("Expected a token in the environment");
+    let token = env::var("BOT_TOKEN").expect("Expected a token in the environment");
 
-    // // Create a new instance of the Client, logging in as a bot. This will
-    // // automatically prepend your bot token with "Bot ", which is a requirement
-    // // by Discord for bot users.
+    // Create a new instance of the Client, logging in as a bot. This will
+    // automatically prepend your bot token with "Bot ", which is a requirement
+    // by Discord for bot users.
 
-    // let handler = Handler::new();
+    let handler = Handler::new();
 
-    // let mut client = Client::builder(&token)
-    //     .event_handler(handler)
-    //     .await
-    //     .expect("Err creating client");
+    let mut client = Client::builder(&token)
+        .event_handler(handler)
+        .await
+        .expect("Err creating client");
 
-    // // Finally, start a single shard, and start listening to events.
-    // //
-    // // Shards will automatically attempt to reconnect, and will perform
-    // // exponential backoff until it reconnects.
-    
-    // if let Err(why) = client.start().await {
-    //     println!("Client error: {:?}", why);
-    // }
+    // Finally, start a single shard, and start listening to events.
+    //
+    // Shards will automatically attempt to reconnect, and will perform
+    // exponential backoff until it reconnects.
+
+    if let Err(why) = client.start().await {
+        println!("Client error: {:?}", why);
+    }
 }
