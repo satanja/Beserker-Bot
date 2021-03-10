@@ -1,7 +1,6 @@
 mod api;
 mod bout;
 
-use api::find_next_bout;
 use bout::Bout;
 use std::collections::HashMap;
 use std::env;
@@ -140,12 +139,7 @@ impl Processor {
     /// `team_id`, at a specified index. Requires `args` to be
     /// `Some(Arguments::Remove(index))`. In case `args` is incorrect, write
     /// an appropriate error.
-    async fn remove(
-        &mut self,
-        tournament_id: usize,
-        team_id: usize,
-        args: Option<Arguments>,
-    ) {
+    async fn remove(&mut self, tournament_id: usize, team_id: usize, args: Option<Arguments>) {
         // match args {
         //     Some(Arguments::Remove(index)) => Ok(()),
         //     Some(op) => Err(format!("received {:?}, expected remove of map index", op)),
@@ -166,10 +160,9 @@ impl Processor {
         args: Option<Arguments>,
     ) {
         // first update the bout / insert a new bout
-        if let Some(bout)  = self.bouts.get_mut(&(tournament_id, team_id)) {
-
+        if let Some(bout) = self.bouts.get_mut(&(tournament_id, team_id)) {
             let result = api::find_next_bout(tournament_id, team_id).await;
-            
+
             match result {
                 Ok(next_bout) => {
                     if *bout != next_bout {
@@ -184,12 +177,11 @@ impl Processor {
                     return;
                 }
             }
-
         } else {
             let result = api::find_next_bout(tournament_id, team_id).await;
             match result {
                 Ok(next_bout) => {
-                   self.bouts.insert((tournament_id, team_id), next_bout);
+                    self.bouts.insert((tournament_id, team_id), next_bout);
                 }
                 Err(why) => {
                     let status = send_error_embed(&why, msg, &ctx.http).await;
@@ -200,7 +192,7 @@ impl Processor {
                 }
             }
         }
-        
+
         // no errors so we can unwrap safely
         let bout = self.bouts.get_mut(&(tournament_id, team_id)).unwrap();
 
@@ -224,13 +216,7 @@ impl Processor {
 
     /// Polls the API for the next bout identified by `tournament_id` and
     /// `team_id`. Forwards any error of the API.
-    async fn poll(
-        &mut self,
-        tournament_id: usize,
-        team_id: usize,
-        args: Option<Arguments>,
-    ) {
-    }
+    async fn poll(&mut self, tournament_id: usize, team_id: usize, args: Option<Arguments>) {}
 }
 
 /// Simple wrapper which is dumped in the context data. The wrapper is nice
@@ -566,13 +552,15 @@ async fn send_success_embed(text: &str, msg: &Message, http: &Http) -> CommandRe
 
 /// Generate an embed of the bout to send to the user(s).
 async fn send_bout_embed(msg: &Message, http: &Http, bout: &Bout) -> CommandResult {
-    msg.channel_id.send_message(http, |m| {
-        m.embed(|e| {
-            e.title(bout.get_tournament());
-            e.color(Colour::BLITZ_BLUE);
-            e
-        });
-        m
-    }).await?;
+    msg.channel_id
+        .send_message(http, |m| {
+            m.embed(|e| {
+                e.title(bout.get_tournament());
+                e.color(Colour::BLITZ_BLUE);
+                e
+            });
+            m
+        })
+        .await?;
     Ok(())
 }

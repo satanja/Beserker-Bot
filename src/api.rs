@@ -76,7 +76,6 @@ async fn get_bout(bout_id: usize) -> Result<Bout, String> {
     }
 }
 
-
 pub async fn find_next_bout(tournament_id: usize, team_id: usize) -> Result<Bout, String> {
     get_bout(2156).await
 }
