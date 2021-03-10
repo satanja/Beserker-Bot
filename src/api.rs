@@ -64,7 +64,7 @@ async fn get_bout(bout_id: usize) -> Result<Bout, String> {
                     .map(|jmap| jmap.name)
                     .collect();
 
-                let bout = Bout::new(tournament_name, datetime, maps);
+                let bout = Bout::new(bout_id, tournament_name, datetime, maps);
                 Ok(bout)
             }
             Err(why) => Err(format!(
@@ -76,13 +76,7 @@ async fn get_bout(bout_id: usize) -> Result<Bout, String> {
     }
 }
 
-/// Gets the next bout from the API. In case `old_bout` has been completed and
-/// no new bout has been found, `None` is returned. In case `old_bout` has not 
-/// been completed, `old_bout` is returned. In case a new bout has been found, 
-/// return that new bout. 
-pub async fn find_next_bout(old_bout: Bout) -> Result<Option<Bout>, String> {
-    match get_bout(2156).await {
-        Ok(result) => Ok(Some(result)),
-        Err(why) => Ok(None),
-    }
+
+pub async fn find_next_bout(tournament_id: usize, team_id: usize) -> Result<Bout, String> {
+    get_bout(2156).await
 }

@@ -1,14 +1,17 @@
 mod api;
 mod bout;
 
+use api::find_next_bout;
 use bout::Bout;
 use std::collections::HashMap;
 use std::env;
 
 use serenity::{
     async_trait,
+    http::Http,
     model::{channel::Message, gateway::Ready},
     prelude::*,
+    utils::Colour,
 };
 
 use serenity::client::{Client, Context, EventHandler};
@@ -22,6 +25,7 @@ use serenity::framework::standard::{
 struct Handler;
 
 /// Actions the bot can perform.
+#[derive(Debug)]
 enum InternalCommand {
     /// Removes a player from a tournament bout, given a tournament and team id.
     Remove(usize, usize),
@@ -64,8 +68,11 @@ impl DiscordCommands {
 
     /// Removes a command from the bot. Note, `discord_command` should not be
     /// prefixed.
-    pub fn remove_command(&mut self, discord_command: &str) {
-        self.commands.remove(discord_command);
+    pub fn remove_command(&mut self, discord_command: &str) -> bool {
+        match self.commands.remove(discord_command) {
+            Some(_) => true,
+            None => false,
+        }
     }
 
     /// Gets the associated command given the string. Note, `discord_command`
@@ -77,93 +84,174 @@ impl DiscordCommands {
 
 /// Data structure to keep track of all the active bouts per tournament per
 /// team.
-struct State {
+struct Processor {
     bouts: HashMap<(usize, usize), Bout>,
 }
 
-impl State {
-    pub fn new() -> State {
-        State {
+impl Processor {
+    pub fn new() -> Processor {
+        Processor {
             bouts: HashMap::new(),
         }
     }
 
     /// Handles the command and updates internal state if necessary.
-    pub fn process(
+    pub async fn process(
         &mut self,
+        ctx: &Context,
+        msg: &Message,
         command: &InternalCommand,
         args: Option<Arguments>,
-    ) -> Result<(), String> {
+    ) {
         match command {
             InternalCommand::Remove(tournament_id, team_id) => {
-                self.remove(*tournament_id, *team_id, args)
+                self.remove(*tournament_id, *team_id, args).await;
             }
             InternalCommand::Insert(tournament_id, team_id) => {
-                self.insert(*tournament_id, *team_id, args)
+                self.insert(*tournament_id, *team_id, ctx, msg, args).await;
             }
             InternalCommand::Poll(tournament_id, team_id) => {
-                self.poll(*tournament_id, *team_id, args)
+                self.poll(*tournament_id, *team_id, args).await;
             }
         }
     }
 
+    // pub async fn create_bout(
+    //     &mut self,
+    //     ctx: &Context,
+    //     msg: &Message,
+    //     tournament_id: usize,
+    //     team_id: usize,
+    // ) {
+    //     match api::find_next_bout(tournament_id, team_id).await {
+    //         Ok(bout) => {
+    //             self.bouts.insert((tournament_id, team_id), bout);
+    //         }
+    //         Err(why) => {
+    //             let status = send_error_embed(&why, &msg, &ctx.http).await;
+    //             if let Err(why) = status {
+    //                 println!("Error sending message: {:?}", why);
+    //             }
+    //         },
+    //     }
+    // }
+
     /// Removes a player from a bout, identified by `tournament_id` and
     /// `team_id`, at a specified index. Requires `args` to be
-    /// `Some(Arguments::Remove(index))`. In case `args` is incorrect, return
+    /// `Some(Arguments::Remove(index))`. In case `args` is incorrect, write
     /// an appropriate error.
-    fn remove(
+    async fn remove(
         &mut self,
         tournament_id: usize,
         team_id: usize,
         args: Option<Arguments>,
-    ) -> Result<(), String> {
-        match args {
-            Some(Arguments::Remove(index)) => Ok(()),
-            Some(op) => Err(format!("received {:?}, expected remove of map index", op)),
-            None => Err("received no arguments, expected map index".to_string()),
-        }
+    ) {
+        // match args {
+        //     Some(Arguments::Remove(index)) => Ok(()),
+        //     Some(op) => Err(format!("received {:?}, expected remove of map index", op)),
+        //     None => Err("received no arguments, expected map index".to_string()),
+        // }
     }
 
     /// Inserts a player into a bout, identified by `tournament_id` and
     /// `team_id`, at a specified index. Requires `args` to be
-    /// `Some(Arguments::Remove(player, index))`. In case `args` is incorrect, return
+    /// `Some(Arguments::Remove(player, index))`. In case `args` is incorrect, write
     /// an appropriate error.
-    fn insert(
+    async fn insert(
         &mut self,
         tournament_id: usize,
         team_id: usize,
+        ctx: &Context,
+        msg: &Message,
         args: Option<Arguments>,
-    ) -> Result<(), String> {
+    ) {
+        // first update the bout / insert a new bout
+        if let Some(bout)  = self.bouts.get_mut(&(tournament_id, team_id)) {
+
+            let result = api::find_next_bout(tournament_id, team_id).await;
+            
+            match result {
+                Ok(next_bout) => {
+                    if *bout != next_bout {
+                        *bout = next_bout;
+                    }
+                }
+                Err(why) => {
+                    let status = send_error_embed(&why, msg, &ctx.http).await;
+                    if let Err(why) = status {
+                        println!("Error sending message: {:?}", why);
+                    }
+                    return;
+                }
+            }
+
+        } else {
+            let result = api::find_next_bout(tournament_id, team_id).await;
+            match result {
+                Ok(next_bout) => {
+                   self.bouts.insert((tournament_id, team_id), next_bout);
+                }
+                Err(why) => {
+                    let status = send_error_embed(&why, msg, &ctx.http).await;
+                    if let Err(why) = status {
+                        println!("Error sending message: {:?}", why);
+                    }
+                    return;
+                }
+            }
+        }
+        
+        // no errors so we can unwrap safely
+        let bout = self.bouts.get_mut(&(tournament_id, team_id)).unwrap();
+
         match args {
-            Some(Arguments::Insert(player, index)) => Ok(()),
-            Some(op) => Err(format!(
-                "received {:?}, expected insert of player name and map index",
-                op
-            )),
-            None => Err("received no arguments, insert of player name and map index".to_string()),
+            Some(Arguments::Insert(player, index)) => bout.insert_player(index, player),
+            Some(op) => {
+                let text = format!("Invalid operation {:?}", op);
+                let status = send_error_embed(&text, msg, &ctx.http).await;
+                if let Err(why) = status {
+                    println!("Error sending message: {:?}", why);
+                }
+            }
+            _ => {}
+        }
+
+        let status = send_bout_embed(msg, &ctx.http, &bout).await;
+        if let Err(why) = status {
+            println!("Error sending message: {:?}", why);
         }
     }
 
     /// Polls the API for the next bout identified by `tournament_id` and
     /// `team_id`. Forwards any error of the API.
-    fn poll(
+    async fn poll(
         &mut self,
         tournament_id: usize,
         team_id: usize,
         args: Option<Arguments>,
-    ) -> Result<(), String> {
-        Ok(())
+    ) {
     }
 }
 
-struct DiscordCommandsData;
-impl TypeMapKey for DiscordCommandsData {
-    type Value = DiscordCommands;
+/// Simple wrapper which is dumped in the context data. The wrapper is nice
+/// to simplify ownership details.
+struct Wrapper {
+    commands: DiscordCommands,
+    processor: Processor,
 }
 
-struct StateData;
-impl TypeMapKey for StateData {
-    type Value = State;
+impl Wrapper {
+    /// Wrapper constructor.
+    pub fn new() -> Wrapper {
+        Wrapper {
+            commands: DiscordCommands::new(),
+            processor: Processor::new(),
+        }
+    }
+}
+
+impl TypeMapKey for Wrapper {
+    type Value = Self;
 }
 
 #[async_trait]
@@ -173,23 +261,81 @@ impl EventHandler for Handler {
     //
     // Event handlers are dispatched through a threadpool, and so multiple
     // events can be dispatched simultaneously.
+
+    /// Handles processing of custom commands.
     async fn message(&self, ctx: Context, msg: Message) {
-        // if !msg.content.starts_with("!") {
-        //     return;
-        // }
+        // Extract the state from the context
+        let mut data = ctx.data.write().await;
+        let wrapper = data.get_mut::<Wrapper>().unwrap();
+        let commands = &wrapper.commands;
 
-        // let words: Vec<_> = msg.content.split(" ").collect();
-        // let command = words[0];
+        // Ensure that the command does not overlap with the admin commands
+        if !msg.content.starts_with("!")
+            || msg.content.starts_with("!add_command")
+            || msg.content.starts_with("!remove_command")
+        {
+            return;
+        }
 
-        // match command {
-        //     "!add_command" => {
-        //         println!("adding a new command!");
-        //     }
-        //     "!remove_command" => {
-        //         println!("removing a command!");
-        //     }
-        //     x => println!("some other command {}", x),
-        // }
+        let words = get_msg_words(&msg.content);
+
+        // message is by definition non-empty
+        let command = words[0];
+
+        // ignore if the message is not a command
+        if !command.starts_with("!") {
+            return;
+        }
+
+        // See if the command has been declared
+        match commands.get(&command) {
+            Some(x) => match x {
+                InternalCommand::Insert(_, _) => {
+                    let processor = &mut wrapper.processor;
+
+                    let words = get_msg_words(&msg.content);
+                    let args = match words.len() {
+                        1 => None,
+                        0 => panic!("does not happen"),
+                        _ => {
+                            let username = msg.author.name.clone();
+                            let index: usize;
+                            match words[1].parse::<usize>() {
+                                Ok(num) => index = num,
+                                Err(why) => {
+                                    if let Err(why) =
+                                        send_error_embed(&why.to_string(), &msg, &ctx.http).await
+                                    {
+                                        println!("Error sending message: {:?}", why);
+                                    }
+                                    return;
+                                }
+                            }
+
+                            Some(Arguments::Insert(username, index))
+                        }
+                    };
+
+                    // run the command
+                    processor.process(&ctx, &msg, x, args).await;
+                }
+                _ => {
+                    let status = send_warning_embed("Not implemented yet.", &msg, &ctx.http).await;
+
+                    if let Err(why) = status {
+                        println!("Error sending message: {:?}", why);
+                    }
+                }
+            },
+            None => {
+                let text = &format!("Command `{}` not found.", &command);
+                let status = send_warning_embed(text, &msg, &ctx.http).await;
+
+                if let Err(why) = status {
+                    println!("Error sending message: {:?}", why);
+                }
+            }
+        }
     }
 
     // Set a handler to be called on the `ready` event. This is called when a
@@ -222,11 +368,9 @@ async fn main() {
         .expect("Err creating client");
 
     // add context data structures
-    let state = State::new();
-    let commands = DiscordCommands::new();
+    let wrapper = Wrapper::new();
     let mut data = client.data.write().await;
-    data.insert::<StateData>(state);
-    data.insert::<DiscordCommandsData>(commands);
+    data.insert::<Wrapper>(wrapper);
     drop(data);
 
     // start listening for events by starting a single shard
@@ -239,45 +383,87 @@ async fn main() {
 // Syntax: !add_command <new_command> <action> [args]
 async fn add_command(ctx: &Context, msg: &Message) -> CommandResult {
     let mut data = ctx.data.write().await;
-    let commands = data.get_mut::<DiscordCommandsData>().unwrap();
+    let wrapper = data.get_mut::<Wrapper>().unwrap();
+    let commands = &mut wrapper.commands;
 
-    let words: Vec<_> = msg.content.split(" ").collect();
+    let words = get_msg_words(&msg.content);
 
     if words.len() < 3 {
-        // TODO: return appropriate error
-        return Ok(());
+        let text = "Not enough arguments. See `help` for correct usage.";
+        return send_error_embed(text, msg, &ctx.http).await;
     }
 
-    let new_command = format!("!{}", words[1]);
+    // prefix the new command with the identifier if the user hasn't done that
+    let new_command = if words[1].starts_with("!") {
+        String::from(words[1])
+    } else {
+        format!("!{}", words[1])
+    };
+
     let action = words[2];
 
     match action.to_lowercase().as_ref() {
         "insert" => {
             // !add_command <new_command> <action> <team_id> <tournament_id>
             if words.len() < 5 {
-                // TODO: return appropriate error
-                return Ok(());
+                let text = &format!("Expected 5 arguments, received {}", words.len() - 1);
+                return send_error_embed(text, msg, &ctx.http).await;
             }
 
             let team_id: usize;
             match words[3].parse::<usize>() {
                 Ok(num) => team_id = num,
-                Err(why) => return Ok(()),
+                Err(why) => {
+                    return send_error_embed(&why.to_string(), msg, &ctx.http).await;
+                }
             }
 
             let tournament_id: usize;
             match words[4].parse::<usize>() {
                 Ok(num) => tournament_id = num,
-                Err(why) => return Ok(()),
+                Err(why) => {
+                    return send_error_embed(&why.to_string(), msg, &ctx.http).await;
+                }
             }
 
-            commands.add_command(new_command, InternalCommand::Insert(tournament_id, team_id));
+            commands.add_command(
+                new_command.clone(),
+                InternalCommand::Insert(tournament_id, team_id),
+            );
+        }
+
+        "remove" => {
+            if words.len() < 5 {
+                let text = &format!("Expected 5 arguments, received {}", words.len() - 1);
+                return send_error_embed(text, msg, &ctx.http).await;
+            }
+
+            let team_id: usize;
+            match words[3].parse::<usize>() {
+                Ok(num) => team_id = num,
+                Err(why) => {
+                    return send_error_embed(&why.to_string(), msg, &ctx.http).await;
+                }
+            }
+
+            let tournament_id: usize;
+            match words[4].parse::<usize>() {
+                Ok(num) => tournament_id = num,
+                Err(why) => {
+                    return send_error_embed(&why.to_string(), msg, &ctx.http).await;
+                }
+            }
+
+            commands.add_command(
+                new_command.clone(),
+                InternalCommand::Remove(tournament_id, team_id),
+            );
         }
 
         _ => {
             msg.reply(
                 ctx,
-                "Invalid action, please use one of `insert`, `remove`, or `poll`.".to_string(),
+                "Expected: `!add_command <new_command> <action> [args].`\nInvalid action, please use one of `insert`, `remove`, or `poll`.".to_string(),
             )
             .await?;
             return Ok(());
@@ -285,7 +471,7 @@ async fn add_command(ctx: &Context, msg: &Message) -> CommandResult {
     }
 
     // println!("{:?}", words);
-    msg.reply(ctx, format!("Sucessfully added command `!{}`.", words[1]))
+    msg.reply(ctx, format!("Sucessfully added command `{}`.", new_command))
         .await?;
 
     Ok(())
@@ -294,13 +480,99 @@ async fn add_command(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 // Syntax: !remove_command <command>
 async fn remove_command(ctx: &Context, msg: &Message) -> CommandResult {
-    let mut data = ctx.data.read().await;
-    let commands = data.get::<DiscordCommandsData>().unwrap();
+    let mut data = ctx.data.write().await;
+    let wrapper = data.get_mut::<Wrapper>().unwrap();
+    let commands = &mut wrapper.commands;
 
-    let words: Vec<_> = msg.content.split(" ").collect();
-    println!("{:?}", words);
+    let words = get_msg_words(&msg.content);
 
-    msg.reply(ctx, format!("Sucessfully removed command `!{}`.", words[1]))
+    if words.len() < 2 {
+        let text = "Not enough arguments. See `help` for correct usage.";
+        return send_error_embed(text, msg, &ctx.http).await;
+    }
+
+    // prefix the command
+    let command = if words[1].starts_with("!") {
+        String::from(words[1])
+    } else {
+        format!("!{}", words[1])
+    };
+
+    match commands.remove_command(&command) {
+        true => {
+            // TODO: clean up state (requires dropping `commands`)
+
+            let text = &format!("Succesfully removed command `{}`.", &command);
+            return send_success_embed(text, msg, &ctx.http).await;
+        }
+        false => {
+            return send_warning_embed("command not found", msg, &ctx.http).await;
+        }
+    }
+}
+
+/// Split message contents by `' '`.
+fn get_msg_words(contents: &str) -> Vec<&str> {
+    contents.split(" ").collect()
+}
+
+/// Send an error embed to the discord guild.
+async fn send_error_embed(text: &str, msg: &Message, http: &Http) -> CommandResult {
+    msg.channel_id
+        .send_message(http, |m| {
+            m.embed(|e| {
+                e.title("Error");
+                e.description(text);
+                e.color(Colour::RED);
+                e
+            });
+            m
+        })
         .await?;
+    Ok(())
+}
+
+/// Send a warning embed to the discord guild.
+async fn send_warning_embed(text: &str, msg: &Message, http: &Http) -> CommandResult {
+    msg.channel_id
+        .send_message(http, |m| {
+            m.embed(|e| {
+                e.title("Warning");
+                e.description(text);
+                e.color(Colour::ORANGE);
+                e
+            });
+            m
+        })
+        .await?;
+    Ok(())
+}
+
+/// Send a success embed to the discord guild.
+async fn send_success_embed(text: &str, msg: &Message, http: &Http) -> CommandResult {
+    msg.channel_id
+        .send_message(http, |m| {
+            m.embed(|e| {
+                e.title("Success");
+                e.description(text);
+                e.color(Colour::DARK_GREEN);
+                e
+            });
+            m
+        })
+        .await?;
+    Ok(())
+}
+
+/// Generate an embed of the bout to send to the user(s).
+async fn send_bout_embed(msg: &Message, http: &Http, bout: &Bout) -> CommandResult {
+    msg.channel_id.send_message(http, |m| {
+        m.embed(|e| {
+            e.title(bout.get_tournament());
+            e.color(Colour::BLITZ_BLUE);
+            e
+        });
+        m
+    }).await?;
     Ok(())
 }
