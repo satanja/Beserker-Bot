@@ -197,12 +197,12 @@ impl Processor {
         let bout = self.bouts.get_mut(&(tournament_id, team_id)).unwrap();
 
         match args {
-            Some(Arguments::Insert(player, index)) => bout.insert_player(index, player),
-            Some(op) => {
-                let text = format!("Invalid operation {:?}", op);
-                let status = send_error_embed(&text, msg, &ctx.http).await;
-                if let Err(why) = status {
-                    println!("Error sending message: {:?}", why);
+            Some(Arguments::Insert(player, index)) => {
+                if let Err(why) = bout.insert_player(index, player) {
+                    let status = send_error_embed(&why, msg, &ctx.http).await;
+                    if let Err(why) = status {
+                        println!("Error sending message: {:?}", why);
+                    }
                 }
             }
             _ => {}
@@ -256,7 +256,7 @@ impl EventHandler for Handler {
         let commands = &wrapper.commands;
 
         // Ensure that the command does not overlap with the admin commands
-        if !msg.content.starts_with("!")
+        if !msg.content.starts_with('!')
             || msg.content.starts_with("!add_command")
             || msg.content.starts_with("!remove_command")
         {
@@ -269,7 +269,7 @@ impl EventHandler for Handler {
         let command = words[0];
 
         // ignore if the message is not a command
-        if !command.starts_with("!") {
+        if !command.starts_with('!') {
             return;
         }
 
@@ -342,7 +342,7 @@ struct Admin;
 #[tokio::main]
 async fn main() {
     let framework = StandardFramework::new()
-        .configure(|c| c.prefix("!")) // set the bot's prefix to "!"
+        .configure(|c| c.prefix("!")) // set the bot's prefix to '!'
         .group(&ADMIN_GROUP);
 
     // Login with a bot token from the environment
@@ -380,7 +380,7 @@ async fn add_command(ctx: &Context, msg: &Message) -> CommandResult {
     }
 
     // prefix the new command with the identifier if the user hasn't done that
-    let new_command = if words[1].starts_with("!") {
+    let new_command = if words[1].starts_with('!') {
         String::from(words[1])
     } else {
         format!("!{}", words[1])
@@ -478,7 +478,7 @@ async fn remove_command(ctx: &Context, msg: &Message) -> CommandResult {
     }
 
     // prefix the command
-    let command = if words[1].starts_with("!") {
+    let command = if words[1].starts_with('!') {
         String::from(words[1])
     } else {
         format!("!{}", words[1])
@@ -555,7 +555,9 @@ async fn send_bout_embed(msg: &Message, http: &Http, bout: &Bout) -> CommandResu
     msg.channel_id
         .send_message(http, |m| {
             m.embed(|e| {
-                e.title(bout.get_tournament());
+                e.title(bout.get_title());
+                e.description(bout.get_description());
+                e.field("Maps", bout.get_maps(), false);
                 e.color(Colour::BLITZ_BLUE);
                 e
             });

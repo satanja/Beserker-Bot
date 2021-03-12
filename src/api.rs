@@ -1,6 +1,7 @@
 use reqwest::{self, IntoUrl};
 use serde::Deserialize;
 use std::collections::HashMap;
+use chrono::prelude::*;
 
 use crate::bout::Bout;
 
@@ -56,7 +57,10 @@ async fn get_bout(bout_id: usize) -> Result<Bout, String> {
         Ok(data) => match parse_bout_data(&data) {
             Ok(parsed) => {
                 let tournament_name = parsed.result.tournament.name;
-                let datetime = parsed.result.datetime;
+                let mut raw_dt = parsed.result.datetime.clone();
+                raw_dt.push('Z');
+
+                let datetime = raw_dt.parse::<DateTime<Utc>>().unwrap();
                 let maps = parsed
                     .result
                     .maps
@@ -64,7 +68,10 @@ async fn get_bout(bout_id: usize) -> Result<Bout, String> {
                     .map(|jmap| jmap.name)
                     .collect();
 
-                let bout = Bout::new(bout_id, tournament_name, datetime, maps);
+                let home = parsed.result.lineups.get(&'A').unwrap().name.clone();
+                let away = parsed.result.lineups.get(&'B').unwrap().name.clone();
+
+                let bout = Bout::new(bout_id, tournament_name, datetime, maps, home, away);
                 Ok(bout)
             }
             Err(why) => Err(format!(
