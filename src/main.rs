@@ -115,26 +115,6 @@ impl Processor {
         }
     }
 
-    // pub async fn create_bout(
-    //     &mut self,
-    //     ctx: &Context,
-    //     msg: &Message,
-    //     tournament_id: usize,
-    //     team_id: usize,
-    // ) {
-    //     match api::find_next_bout(tournament_id, team_id).await {
-    //         Ok(bout) => {
-    //             self.bouts.insert((tournament_id, team_id), bout);
-    //         }
-    //         Err(why) => {
-    //             let status = send_error_embed(&why, &msg, &ctx.http).await;
-    //             if let Err(why) = status {
-    //                 println!("Error sending message: {:?}", why);
-    //             }
-    //         },
-    //     }
-    // }
-
     /// Removes a player from a bout, identified by `tournament_id` and
     /// `team_id`, at a specified index. Requires `args` to be
     /// `Some(Arguments::Remove(index))`. In case `args` is incorrect, write

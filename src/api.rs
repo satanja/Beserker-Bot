@@ -1,7 +1,7 @@
+use chrono::prelude::*;
 use reqwest::{self, IntoUrl};
 use serde::Deserialize;
 use std::collections::HashMap;
-use chrono::prelude::*;
 
 use crate::bout::Bout;
 
@@ -13,6 +13,7 @@ struct ApiBoutResult {
 
 #[derive(Deserialize, Debug)]
 struct JBout {
+    id: usize,
     datetime: String,
     maps: Vec<JMap>,
     tournament: JTournament,
@@ -34,6 +35,22 @@ struct JTournament {
 struct JTeam {
     id: usize,
     name: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct ApiTournamentResult {
+    code: String,
+    result: JContent,
+}
+
+#[derive(Deserialize, Debug)]
+struct JContent {
+    content: Vec<JBout>,
+}
+
+fn parse_tournament_data(data: &str) -> serde_json::Result<ApiTournamentResult> {
+    let parsed: ApiTournamentResult = serde_json::from_str(&data)?;
+    Ok(parsed)
 }
 
 /// Attempt to parse raw JSON bout data to a `ApiBoutResult`.
@@ -84,5 +101,38 @@ async fn get_bout(bout_id: usize) -> Result<Bout, String> {
 }
 
 pub async fn find_next_bout(tournament_id: usize, team_id: usize) -> Result<Bout, String> {
-    get_bout(2156).await
+    let address = format!(
+        "https://api.spire.gg/matches?tournamentId={}",
+        tournament_id
+    );
+    match make_request(&address).await {
+        Ok(data) => match parse_tournament_data(&data) {
+            Ok(parsed) => {
+                let team_bouts: Vec<_> = parsed
+                    .result
+                    .content
+                    .iter()
+                    .filter(|jbout| {
+                        jbout.lineups.get(&'A').unwrap().id == team_id
+                            || jbout.lineups.get(&'B').unwrap().id == team_id
+                    })
+                    .collect();
+                
+                if team_bouts.len() == 0 {
+                    return Err("No active matches found.".to_string());
+                }
+
+                let bout_id = team_bouts[1].id;
+                get_bout(bout_id).await
+            }
+            Err(why) => Err(format!(
+                "Error parsing response of \"{}\"!\n\t{}",
+                address, why
+            )),
+        },
+        Err(why) => Err(format!(
+            "Error parsing response of \"{}\"!\n\t{}",
+            address, why
+        )),
+    }
 }

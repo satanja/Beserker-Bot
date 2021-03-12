@@ -53,10 +53,6 @@ impl Bout {
         Ok(())
     }
 
-    fn get_tournament(&self) -> &str {
-        &self.tournament
-    }
-
     pub fn get_title(&self) -> String {
         format!("{} vs {}", &self.home, &self.away)
     }
