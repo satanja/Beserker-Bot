@@ -31,14 +31,12 @@ enum InternalCommand {
 
     /// Adds a player to a trounament bout, given a tournament and team id.
     Insert(usize, usize),
-
-    /// Polls the API given a tournament and team id.
-    Poll(usize, usize),
 }
 
 #[derive(Debug)]
 /// Additional arguments to process internal commands
 enum Arguments {
+    #[allow(dead_code)]
     /// Removes a player at a specified index
     Remove(usize),
 
@@ -104,13 +102,10 @@ impl Processor {
     ) {
         match command {
             InternalCommand::Remove(tournament_id, team_id) => {
-                self.remove(*tournament_id, *team_id, args).await;
+                self.remove(*tournament_id, *team_id, ctx, msg, args).await;
             }
             InternalCommand::Insert(tournament_id, team_id) => {
                 self.insert(*tournament_id, *team_id, ctx, msg, args).await;
-            }
-            InternalCommand::Poll(tournament_id, team_id) => {
-                self.poll(*tournament_id, *team_id, args).await;
             }
         }
     }
@@ -119,12 +114,55 @@ impl Processor {
     /// `team_id`, at a specified index. Requires `args` to be
     /// `Some(Arguments::Remove(index))`. In case `args` is incorrect, write
     /// an appropriate error.
-    async fn remove(&mut self, tournament_id: usize, team_id: usize, args: Option<Arguments>) {
-        // match args {
-        //     Some(Arguments::Remove(index)) => Ok(()),
-        //     Some(op) => Err(format!("received {:?}, expected remove of map index", op)),
-        //     None => Err("received no arguments, expected map index".to_string()),
-        // }
+    async fn remove(
+        &mut self,
+        tournament_id: usize,
+        team_id: usize,
+        ctx: &Context,
+        msg: &Message,
+        args: Option<Arguments>,
+    ) {
+        match args {
+            Some(op) => match op {
+                Arguments::Remove(index) => match self.bouts.get_mut(&(tournament_id, team_id)) {
+                    Some(bout) => {
+                        if let Err(why) = bout.remove_player(index) {
+                            let status = send_error_embed(&why, msg, &ctx.http).await;
+                            if let Err(why) = status {
+                                println!("Error sending message: {:?}", why);
+                            }
+                        }
+                    }
+                    None => {
+                        let status =
+                            send_error_embed("No active matches found.", msg, &ctx.http).await;
+                        if let Err(why) = status {
+                            println!("Error sending message: {:?}", why);
+                        }
+                        return;
+                    }
+                },
+                _ => {}
+            },
+            None => {
+                let status = send_error_embed(
+                    "Invalid number of arguments. Please give an index.",
+                    msg,
+                    &ctx.http,
+                )
+                .await;
+                if let Err(why) = status {
+                    println!("Error sending message: {:?}", why);
+                }
+                return;
+            }
+        }
+        let bout = self.bouts.get(&(tournament_id, team_id)).unwrap();
+
+        let status = send_bout_embed(msg, &ctx.http, &bout).await;
+        if let Err(why) = status {
+            println!("Error sending message: {:?}", why);
+        }
     }
 
     /// Inserts a player into a bout, identified by `tournament_id` and
@@ -193,10 +231,6 @@ impl Processor {
             println!("Error sending message: {:?}", why);
         }
     }
-
-    /// Polls the API for the next bout identified by `tournament_id` and
-    /// `team_id`. Forwards any error of the API.
-    async fn poll(&mut self, tournament_id: usize, team_id: usize, args: Option<Arguments>) {}
 }
 
 /// Simple wrapper which is dumped in the context data. The wrapper is nice
@@ -285,12 +319,30 @@ impl EventHandler for Handler {
                     // run the command
                     processor.process(&ctx, &msg, x, args).await;
                 }
-                _ => {
-                    let status = send_warning_embed("Not implemented yet.", &msg, &ctx.http).await;
+                InternalCommand::Remove(_, _) => {
+                    let processor = &mut wrapper.processor;
+                    let words = get_msg_words(&msg.content);
 
-                    if let Err(why) = status {
-                        println!("Error sending message: {:?}", why);
-                    }
+                    let args = match words.len() {
+                        1 => None,
+                        0 => panic!("does not happen"),
+                        _ => {
+                            let index: usize;
+                            match words[1].parse::<usize>() {
+                                Ok(num) => index = num,
+                                Err(why) => {
+                                    if let Err(why) =
+                                        send_error_embed(&why.to_string(), &msg, &ctx.http).await
+                                    {
+                                        println!("Error sending message: {:?}", why);
+                                    }
+                                    return;
+                                }
+                            }
+                            Some(Arguments::Remove(index))
+                        }
+                    };
+                    processor.process(&ctx, &msg, x, args).await;
                 }
             },
             None => {
