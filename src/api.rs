@@ -122,7 +122,7 @@ pub async fn find_next_bout(tournament_id: usize, team_id: usize) -> Result<Bout
                     return Err("No active matches found.".to_string());
                 }
 
-                let bout_id = team_bouts[1].id;
+                let bout_id = team_bouts[0].id;
                 get_bout(bout_id).await
             }
             Err(why) => Err(format!(
