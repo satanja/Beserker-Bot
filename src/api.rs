@@ -117,7 +117,7 @@ pub async fn find_next_bout(tournament_id: usize, team_id: usize) -> Result<Bout
                             || jbout.lineups.get(&'B').unwrap().id == team_id
                     })
                     .collect();
-                
+
                 if team_bouts.len() == 0 {
                     return Err("No active matches found.".to_string());
                 }

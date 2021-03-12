@@ -21,7 +21,14 @@ impl PartialEq for Bout {
 }
 
 impl Bout {
-    pub fn new(id: usize, tournament: String, utc_datetime: DateTime<Utc>, maps: Vec<String>, home: String, away: String) -> Bout {
+    pub fn new(
+        id: usize,
+        tournament: String,
+        utc_datetime: DateTime<Utc>,
+        maps: Vec<String>,
+        home: String,
+        away: String,
+    ) -> Bout {
         let datetime = utc_datetime.with_timezone(&Local);
         let maps = maps.into_iter().map(|map| (map, None)).collect();
         Bout {
@@ -30,7 +37,7 @@ impl Bout {
             datetime,
             maps,
             home,
-            away
+            away,
         }
     }
 
@@ -38,7 +45,7 @@ impl Bout {
         if index >= 5 || index == 0 {
             return Err(format!("Index out of bounds: {}", index));
         }
-        
+
         self.maps[index - 1].1 = Some(player);
 
         Ok(())
@@ -61,7 +68,10 @@ impl Bout {
         let date = self.datetime.format("%A %B %d, %Y").to_string();
         let time = self.datetime.time().to_string();
         let url = format!("https://spire.gg/match/{}", self.id);
-        format!("Date: {}\nTime: {}\nChannel: spire{}\n{}", date, time, self.id, url)
+        format!(
+            "Date: {}\nTime: {}\nChannel: spire{}\n{}",
+            date, time, self.id, url
+        )
     }
 
     pub fn get_maps(&self) -> String {
