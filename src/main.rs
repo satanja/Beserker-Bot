@@ -347,12 +347,7 @@ impl EventHandler for Handler {
                 }
             },
             None => {
-                let text = &format!("Command `{}` not found.", &command);
-                let status = send_warning_embed(text, &msg, &ctx.http).await;
-
-                if let Err(why) = status {
-                    println!("Error sending message: {:?}", why);
-                }
+                // do nothing when the command is not recognized
             }
         }
     }
