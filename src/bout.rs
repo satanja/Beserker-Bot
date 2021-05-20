@@ -42,7 +42,7 @@ impl Bout {
     }
 
     pub fn insert_player(&mut self, index: usize, player: String) -> Result<(), String> {
-        if index >= 5 || index == 0 {
+        if index >= self.maps.len() || index == 0 {
             return Err(format!("Index out of bounds: {}", index));
         }
 
@@ -52,7 +52,7 @@ impl Bout {
     }
 
     pub fn remove_player(&mut self, index: usize) -> Result<(), String> {
-        if index >= 5 || index == 0 {
+        if index >= self.maps.len() || index == 0 {
             return Err(format!("Index out of bounds: {}", index));
         }
         self.maps[index - 1].1 = None;
@@ -67,30 +67,34 @@ impl Bout {
     pub fn get_description(&self) -> String {
         let date = self.datetime.format("%A %B %d, %Y").to_string();
         let time = self.datetime.time().to_string();
+        let remaining = self
+            .datetime
+            .signed_duration_since(Local::now());
+        let days = remaining.num_days();
+        let hours = remaining.num_hours() - days * 24;
+        let min = remaining.num_minutes() - days * 24 * 60 - hours * 60; 
+
         let url = format!("https://spire.gg/match/{}", self.id);
         format!(
-            "Date: {}\nTime: {}\nChannel: spire{}\n{}",
-            date, time, self.id, url
+            "Date: {}\nTime: {} (in: {}d {}hr {}min)\nChannel: spire{}\n{}",
+            date, time, days, hours, min, self.id, url
         )
     }
 
     pub fn get_maps(&self) -> String {
         let mut result = String::new();
-        for i in 0..5 {
+        let maps = self.maps.len();
+
+        for i in 0..maps {
             let map = &self.maps[i];
             if let Some(name) = &map.1 {
                 result.push_str(name);
             } else {
                 result.push('[');
-                match i {
-                    0 => result.push('1'),
-                    1 => result.push('2'),
-                    2 => result.push('3'),
-                    3 => result.push('4'),
-                    4 => {
-                        result.push_str("ACE");
-                    }
-                    _ => panic!("does not happen"),
+                if i < maps - 1 {
+                    result.push_str(&(i + 1).to_string());
+                } else {
+                    result.push_str("ACE")
                 }
                 result.push(']');
             }
