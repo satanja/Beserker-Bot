@@ -2,7 +2,7 @@ mod api;
 mod bout;
 
 use bout::Bout;
-use std::collections::HashMap;
+use std::{collections::HashMap, usize};
 use std::env;
 
 use serenity::{
@@ -65,11 +65,8 @@ impl DiscordCommands {
 
     /// Removes a command from the bot. Note, `discord_command` should not be
     /// prefixed.
-    pub fn remove_command(&mut self, discord_command: &str) -> bool {
-        match self.commands.remove(discord_command) {
-            Some(_) => true,
-            None => false,
-        }
+    pub fn remove_command(&mut self, discord_command: &str) -> Option<InternalCommand> {
+        self.commands.remove(discord_command)
     }
 
     /// Gets the associated command given the string. Note, `discord_command`
@@ -108,6 +105,10 @@ impl Processor {
                 self.insert(*tournament_id, *team_id, ctx, msg, args).await;
             }
         }
+    }
+
+    pub fn drop_entry(&mut self, id: (usize, usize)) -> Option<Bout> {
+        self.bouts.remove(&id)
     }
 
     /// Removes a player from a bout, identified by `tournament_id` and
@@ -517,13 +518,20 @@ async fn remove_command(ctx: &Context, msg: &Message) -> CommandResult {
     };
 
     match commands.remove_command(&command) {
-        true => {
+        Some(internal_command) => {
             // TODO: clean up state (requires dropping `commands`)
+            match internal_command {
+                InternalCommand::Insert(team_id, tournament_id) => {
+                    let processor = &mut wrapper.processor;
+                    processor.drop_entry((team_id, tournament_id));
+                }
+                _ => {}
+            }
 
             let text = &format!("Succesfully removed command `{}`.", &command);
             return send_success_embed(text, msg, &ctx.http).await;
         }
-        false => {
+        None => {
             return send_warning_embed("command not found", msg, &ctx.http).await;
         }
     }
