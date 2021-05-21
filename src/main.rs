@@ -592,22 +592,6 @@ async fn send_message_embed(response: Response, msg: &Message, http: &Http) -> C
     Ok(())
 }
 
-/// Send an error embed to the discord guild.
-async fn send_error_embed(text: &str, msg: &Message, http: &Http) -> CommandResult {
-    msg.channel_id
-        .send_message(http, |m| {
-            m.embed(|e| {
-                e.title("Error");
-                e.description(text);
-                e.color(Colour::RED);
-                e
-            });
-            m
-        })
-        .await?;
-    Ok(())
-}
-
 /// Generate an embed of the bout to send to the user(s).
 async fn send_bout_embed(msg: &Message, http: &Http, bout: &Bout) -> CommandResult {
     msg.channel_id
