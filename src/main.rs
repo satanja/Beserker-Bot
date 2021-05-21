@@ -1,9 +1,11 @@
 mod api;
 mod bout;
+mod response;
 
 use bout::Bout;
-use std::{collections::HashMap, usize};
+use response::{Response, ResponseType};
 use std::env;
+use std::{collections::HashMap, usize};
 
 use serenity::{
     async_trait,
@@ -128,15 +130,20 @@ impl Processor {
                 Arguments::Remove(index) => match self.bouts.get_mut(&(tournament_id, team_id)) {
                     Some(bout) => {
                         if let Err(why) = bout.remove_player(index) {
-                            let status = send_error_embed(&why, msg, &ctx.http).await;
+                            let status = send_message_embed(why, msg, &ctx.http).await;
                             if let Err(why) = status {
                                 println!("Error sending message: {:?}", why);
                             }
                         }
                     }
                     None => {
-                        let status =
-                            send_error_embed("No active matches found.", msg, &ctx.http).await;
+                        let title = String::from("No active matches found");
+                        let message = format!(
+                            "For further information see https://spire.gg/tournament/{}#brackets.",
+                            tournament_id
+                        );
+                        let response = Response::new_error(title, message);
+                        let status = send_message_embed(response, msg, &ctx.http).await;
                         if let Err(why) = status {
                             println!("Error sending message: {:?}", why);
                         }
@@ -146,12 +153,11 @@ impl Processor {
                 _ => {}
             },
             None => {
-                let status = send_error_embed(
-                    "Invalid number of arguments. Please give an index.",
-                    msg,
-                    &ctx.http,
-                )
-                .await;
+                let title = String::from("Missing map number");
+                let text = String::from("Please specify which map to remove a player from");
+                let response = Response::new_error(title, text);
+
+                let status = send_message_embed(response, msg, &ctx.http).await;
                 if let Err(why) = status {
                     println!("Error sending message: {:?}", why);
                 }
@@ -189,7 +195,7 @@ impl Processor {
                     }
                 }
                 Err(why) => {
-                    let status = send_error_embed(&why, msg, &ctx.http).await;
+                    let status = send_message_embed(why, msg, &ctx.http).await;
                     if let Err(why) = status {
                         println!("Error sending message: {:?}", why);
                     }
@@ -203,7 +209,7 @@ impl Processor {
                     self.bouts.insert((tournament_id, team_id), next_bout);
                 }
                 Err(why) => {
-                    let status = send_error_embed(&why, msg, &ctx.http).await;
+                    let status = send_message_embed(why, msg, &ctx.http).await;
                     if let Err(why) = status {
                         println!("Error sending message: {:?}", why);
                     }
@@ -218,7 +224,7 @@ impl Processor {
         match args {
             Some(Arguments::Insert(player, index)) => {
                 if let Err(why) = bout.insert_player(index, player) {
-                    let status = send_error_embed(&why, msg, &ctx.http).await;
+                    let status = send_message_embed(why, msg, &ctx.http).await;
                     if let Err(why) = status {
                         println!("Error sending message: {:?}", why);
                     }
@@ -304,8 +310,12 @@ impl EventHandler for Handler {
                             match words[1].parse::<usize>() {
                                 Ok(num) => index = num,
                                 Err(why) => {
+                                    let title =
+                                        String::from("Please enter a whole positive number");
+                                    let text = why.to_string();
+                                    let response = Response::new_error(title, text);
                                     if let Err(why) =
-                                        send_error_embed(&why.to_string(), &msg, &ctx.http).await
+                                        send_message_embed(response, &msg, &ctx.http).await
                                     {
                                         println!("Error sending message: {:?}", why);
                                     }
@@ -332,8 +342,12 @@ impl EventHandler for Handler {
                             match words[1].parse::<usize>() {
                                 Ok(num) => index = num,
                                 Err(why) => {
+                                    let title =
+                                        String::from("Please enter a whole positive number");
+                                    let text = why.to_string();
+                                    let response = Response::new_error(title, text);
                                     if let Err(why) =
-                                        send_error_embed(&why.to_string(), &msg, &ctx.http).await
+                                        send_message_embed(response, &msg, &ctx.http).await
                                     {
                                         println!("Error sending message: {:?}", why);
                                     }
@@ -403,8 +417,10 @@ async fn add_command(ctx: &Context, msg: &Message) -> CommandResult {
     let words = get_msg_words(&msg.content);
 
     if words.len() < 3 {
-        let text = "Not enough arguments. See `help` for correct usage.";
-        return send_error_embed(text, msg, &ctx.http).await;
+        let title = String::from("Not enough identifier");
+        let text = String::from("Expected `!add_command <new_command> <action> [args]`");
+        let response = Response::new_error(title, text);
+        return send_message_embed(response, msg, &ctx.http).await;
     }
 
     // prefix the new command with the identifier if the user hasn't done that
@@ -420,15 +436,20 @@ async fn add_command(ctx: &Context, msg: &Message) -> CommandResult {
         "insert" => {
             // !add_command <new_command> <action> <team_id> <tournament_id>
             if words.len() < 5 {
-                let text = &format!("Expected 5 arguments, received {}", words.len() - 1);
-                return send_error_embed(text, msg, &ctx.http).await;
+                let title = String::from("Not enough arguments");
+                let text = format!("Expected 5 arguments, received {}", words.len() - 1);
+                let response = Response::new_error(title, text);
+                return send_message_embed(response, msg, &ctx.http).await;
             }
 
             let team_id: usize;
             match words[3].parse::<usize>() {
                 Ok(num) => team_id = num,
                 Err(why) => {
-                    return send_error_embed(&why.to_string(), msg, &ctx.http).await;
+                    let title = String::from("Please enter a whole positive number");
+                    let text = why.to_string();
+                    let response = Response::new_error(title, text);
+                    return send_message_embed(response, msg, &ctx.http).await;
                 }
             }
 
@@ -436,7 +457,10 @@ async fn add_command(ctx: &Context, msg: &Message) -> CommandResult {
             match words[4].parse::<usize>() {
                 Ok(num) => tournament_id = num,
                 Err(why) => {
-                    return send_error_embed(&why.to_string(), msg, &ctx.http).await;
+                    let title = String::from("Please enter a whole positive number");
+                    let text = why.to_string();
+                    let response = Response::new_error(title, text);
+                    return send_message_embed(response, msg, &ctx.http).await;
                 }
             }
 
@@ -448,15 +472,20 @@ async fn add_command(ctx: &Context, msg: &Message) -> CommandResult {
 
         "remove" => {
             if words.len() < 5 {
-                let text = &format!("Expected 5 arguments, received {}", words.len() - 1);
-                return send_error_embed(text, msg, &ctx.http).await;
+                let title = String::from("Invalid command");
+                let text = format!("Expected 5 arguments, received {}", words.len() - 1);
+                let response = Response::new_error(title, text);
+                return send_message_embed(response, msg, &ctx.http).await;
             }
 
             let team_id: usize;
             match words[3].parse::<usize>() {
                 Ok(num) => team_id = num,
                 Err(why) => {
-                    return send_error_embed(&why.to_string(), msg, &ctx.http).await;
+                    let title = String::from("Please enter a whole positive number");
+                    let text = why.to_string();
+                    let response = Response::new_error(title, text);
+                    return send_message_embed(response, msg, &ctx.http).await;
                 }
             }
 
@@ -464,7 +493,10 @@ async fn add_command(ctx: &Context, msg: &Message) -> CommandResult {
             match words[4].parse::<usize>() {
                 Ok(num) => tournament_id = num,
                 Err(why) => {
-                    return send_error_embed(&why.to_string(), msg, &ctx.http).await;
+                    let title = String::from("Please enter a whole positive number");
+                    let text = why.to_string();
+                    let response = Response::new_error(title, text);
+                    return send_message_embed(response, msg, &ctx.http).await;
                 }
             }
 
@@ -475,20 +507,18 @@ async fn add_command(ctx: &Context, msg: &Message) -> CommandResult {
         }
 
         _ => {
-            msg.reply(
-                ctx,
-                "Expected: `!add_command <new_command> <action> [args].`\nInvalid action, please use one of `insert`, `remove`, or `poll`.".to_string(),
-            )
-            .await?;
-            return Ok(());
+            let title = String::from("Invalid command");
+            let text = String::from("Expected: `!add_command <new_command> <action> [args].`\nInvalid action, please use one of `insert`, `remove`, or `poll`.");
+            let response = Response::new_error(title, text);
+            return send_message_embed(response, msg, &ctx.http).await;
         }
     }
 
-    // println!("{:?}", words);
-    msg.reply(ctx, format!("Sucessfully added command `{}`.", new_command))
-        .await?;
+    let title = String::from("Added command");
+    let text = format!("Sucessfully added command `{}`.", new_command);
+    let response = Response::new_success(title, text);
 
-    Ok(())
+    send_message_embed(response, msg, &ctx.http).await
 }
 
 #[command]
@@ -501,8 +531,10 @@ async fn remove_command(ctx: &Context, msg: &Message) -> CommandResult {
     let words = get_msg_words(&msg.content);
 
     if words.len() < 2 {
-        let text = "Not enough arguments. See `help` for correct usage.";
-        return send_error_embed(text, msg, &ctx.http).await;
+        let title = String::from("Not enough arguments");
+        let text = String::from("Usage: !remove_command <command_name>");
+        let response = Response::new_error(title, text);
+        return send_message_embed(response, msg, &ctx.http).await;
     }
 
     // prefix the command
@@ -514,7 +546,6 @@ async fn remove_command(ctx: &Context, msg: &Message) -> CommandResult {
 
     match commands.remove_command(&command) {
         Some(internal_command) => {
-            // TODO: clean up state (requires dropping `commands`)
             match internal_command {
                 InternalCommand::Insert(team_id, tournament_id) => {
                     let processor = &mut wrapper.processor;
@@ -523,11 +554,14 @@ async fn remove_command(ctx: &Context, msg: &Message) -> CommandResult {
                 _ => {}
             }
 
-            let text = &format!("Succesfully removed command `{}`.", &command);
-            return send_success_embed(text, msg, &ctx.http).await;
+            let text = format!("Succesfully removed command `{}`.", &command);
+            let response = Response::new_success(String::from("Removed command"), text);
+            return send_message_embed(response, msg, &ctx.http).await;
         }
         None => {
-            return send_warning_embed("command not found", msg, &ctx.http).await;
+            let text = format!("The command `{}` could not be found.", &command);
+            let response = Response::new_warning(String::from("Command not found"), text);
+            return send_message_embed(response, msg, &ctx.http).await;
         }
     }
 }
@@ -535,6 +569,27 @@ async fn remove_command(ctx: &Context, msg: &Message) -> CommandResult {
 /// Split message contents by `' '`.
 fn get_msg_words(contents: &str) -> Vec<&str> {
     contents.split(" ").collect()
+}
+
+async fn send_message_embed(response: Response, msg: &Message, http: &Http) -> CommandResult {
+    let color = match response.response_type {
+        ResponseType::Error => Colour::RED,
+        ResponseType::Success => Colour::DARK_GREEN,
+        ResponseType::Warning => Colour::ORANGE,
+    };
+
+    msg.channel_id
+        .send_message(http, |m| {
+            m.embed(|e| {
+                e.title(response.title);
+                e.description(response.contents);
+                e.color(color);
+                e
+            });
+            m
+        })
+        .await?;
+    Ok(())
 }
 
 /// Send an error embed to the discord guild.
@@ -545,38 +600,6 @@ async fn send_error_embed(text: &str, msg: &Message, http: &Http) -> CommandResu
                 e.title("Error");
                 e.description(text);
                 e.color(Colour::RED);
-                e
-            });
-            m
-        })
-        .await?;
-    Ok(())
-}
-
-/// Send a warning embed to the discord guild.
-async fn send_warning_embed(text: &str, msg: &Message, http: &Http) -> CommandResult {
-    msg.channel_id
-        .send_message(http, |m| {
-            m.embed(|e| {
-                e.title("Warning");
-                e.description(text);
-                e.color(Colour::ORANGE);
-                e
-            });
-            m
-        })
-        .await?;
-    Ok(())
-}
-
-/// Send a success embed to the discord guild.
-async fn send_success_embed(text: &str, msg: &Message, http: &Http) -> CommandResult {
-    msg.channel_id
-        .send_message(http, |m| {
-            m.embed(|e| {
-                e.title("Success");
-                e.description(text);
-                e.color(Colour::DARK_GREEN);
                 e
             });
             m

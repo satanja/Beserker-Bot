@@ -4,6 +4,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 
 use crate::bout::Bout;
+use crate::response::Response;
 
 #[derive(Deserialize, Debug)]
 struct ApiBoutResult {
@@ -67,7 +68,7 @@ async fn make_request<T: IntoUrl>(request: T) -> Result<String, reqwest::Error> 
 
 /// Gets the match (referred to as Bout to avoid overlap with the Rust keyword
 /// `match`) with `bout_id` from the spire.gg API.
-async fn get_bout(bout_id: usize) -> Result<Bout, String> {
+async fn get_bout(bout_id: usize) -> Result<Bout, Response> {
     let address = format!("https://api.spire.gg/matches/{}", bout_id);
 
     match make_request(&address).await {
@@ -91,16 +92,13 @@ async fn get_bout(bout_id: usize) -> Result<Bout, String> {
                 let bout = Bout::new(bout_id, tournament_name, datetime, maps, home, away);
                 Ok(bout)
             }
-            Err(why) => Err(format!(
-                "Error parsing response of \"{}\"!\n\t{}",
-                address, why
-            )),
+            Err(why) => Err(create_api_error_response(why.to_string(), address)),
         },
-        Err(why) => Err(format!("api endpoint error at \"{}\"!\n\t{}", address, why)),
+        Err(why) => Err(create_api_error_response(why.to_string(), address)),
     }
 }
 
-pub async fn find_next_bout(tournament_id: usize, team_id: usize) -> Result<Bout, String> {
+pub async fn find_next_bout(tournament_id: usize, team_id: usize) -> Result<Bout, Response> {
     let address = format!(
         "https://api.spire.gg/matches?tournamentId={}",
         tournament_id
@@ -119,20 +117,27 @@ pub async fn find_next_bout(tournament_id: usize, team_id: usize) -> Result<Bout
                     .collect();
 
                 if team_bouts.len() == 0 {
-                    return Err("No active matches found.".to_string());
+                    let title = String::from("No active matches found");
+                    let message = format!(
+                        "For further information see https://spire.gg/tournament/{}#brackets.",
+                        tournament_id
+                    );
+                    let response = Response::new_error(title, message);
+                    return Err(response);
                 }
 
                 let bout_id = team_bouts[0].id;
                 get_bout(bout_id).await
             }
-            Err(why) => Err(format!(
-                "Error parsing response of \"{}\"!\n\t{}",
-                address, why
-            )),
+
+            Err(why) => Err(create_api_error_response(why.to_string(), address)),
         },
-        Err(why) => Err(format!(
-            "Error parsing response of \"{}\"!\n\t{}",
-            address, why
-        )),
+        Err(why) => Err(create_api_error_response(why.to_string(), address)),
     }
+}
+
+fn create_api_error_response(why: String, address: String) -> Response {
+    let title = String::from("API error");
+    let message = format!("Error parsing response of \"{}\"!\n\t{}", address, why);
+    Response::new_error(title, message)
 }

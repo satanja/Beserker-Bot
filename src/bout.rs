@@ -1,5 +1,6 @@
 pub type Player = String;
 pub type MapName = String;
+use crate::response::Response;
 use chrono::prelude::*;
 
 #[derive(Debug)]
@@ -41,22 +42,27 @@ impl Bout {
         }
     }
 
-    pub fn insert_player(&mut self, index: usize, player: String) -> Result<(), String> {
+    fn is_valid_index(&self, index: usize) -> Result<(), Response> {
         if index >= self.maps.len() || index == 0 {
-            return Err(format!("Index out of bounds: {}", index));
+            let text = format!("Please enter a number between 1 and {}", self.maps.len() - 1);
+            let response = Response::new_error(String::from("Invalid index."), text);
+            return Err(response);
         }
-
-        self.maps[index - 1].1 = Some(player);
 
         Ok(())
     }
 
-    pub fn remove_player(&mut self, index: usize) -> Result<(), String> {
-        if index >= self.maps.len() || index == 0 {
-            return Err(format!("Index out of bounds: {}", index));
-        }
-        self.maps[index - 1].1 = None;
+    pub fn insert_player(&mut self, index: usize, player: String) -> Result<(), Response> {
+        self.is_valid_index(index)?;
 
+        self.maps[index - 1].1 = Some(player);
+        Ok(())
+    }
+
+    pub fn remove_player(&mut self, index: usize) -> Result<(), Response> {
+        self.is_valid_index(index)?;
+
+        self.maps[index - 1].1 = None;
         Ok(())
     }
 
@@ -67,12 +73,10 @@ impl Bout {
     pub fn get_description(&self) -> String {
         let date = self.datetime.format("%A %B %d, %Y").to_string();
         let time = self.datetime.time().to_string();
-        let remaining = self
-            .datetime
-            .signed_duration_since(Local::now());
+        let remaining = self.datetime.signed_duration_since(Local::now());
         let days = remaining.num_days();
         let hours = remaining.num_hours() - days * 24;
-        let min = remaining.num_minutes() - days * 24 * 60 - hours * 60; 
+        let min = remaining.num_minutes() - days * 24 * 60 - hours * 60;
 
         let url = format!("https://spire.gg/match/{}", self.id);
         format!(
